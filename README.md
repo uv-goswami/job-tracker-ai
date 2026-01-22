@@ -4,6 +4,8 @@
 
 A full-stack intelligent job tracking system that integrates real-time job searching, AI-driven resume matching, and automated application status tracking. The system utilizes a "Smart Backend" architecture where state transitions are managed via Redis, ensuring data consistency and scalability.
 
+---
+
 ## Architecture
 
 The application follows a client-server architecture with a stateless REST API and a high-performance in-memory data store.
@@ -18,9 +20,9 @@ The application follows a client-server architecture with a stateless REST API a
 * Session storage (Resumes, User IDs).
 * Job Caching (1-hour TTL).
 * Application State Machine (Pending/Applied statuses).
-
-
 4. **AI Engine:** Google Gemini Flash 2.5 for resume scoring and natural language chat interactions.
+
+---
 
 ## Directory Structuree
 
@@ -60,6 +62,8 @@ job-tracker-ai/
 ├── .gitignore
 └── README.md
 ```
+
+---
 
 ## Setup Instructions
 
@@ -113,7 +117,8 @@ npm install
 npm run dev
 
 ```
-
+---
+<br>
 
 
 ## AI Matching Logic
@@ -165,4 +170,18 @@ The core challenge was tracking "external" actions (applying on a third-party si
 3. **Session Security:** Currently, user identification relies on a client-generated ID stored in LocalStorage.
     * *Improvement:* Implement proper Authentication (OAuth/JWT) to secure user data across devices.
 
-    ![alt text](image.png)
+---
+
+# Screenshots
+
+**Jobs:**
+![ss1](diagrams/ss1.png)
+
+**Resume Upload**
+![resume](diagrams/reume.png)
+
+**AI Chat**
+![Ai](diagrams/Ai.png)
+
+**Pop Up after checking Job**
+![popup](diagrams/popup.png)
