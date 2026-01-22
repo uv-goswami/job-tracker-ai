@@ -1,5 +1,7 @@
 # AI-Powered Job Tracker
 
+**Live Deployment (Render):** [https://job-tracker-ui-79a8.onrender.com/](https://job-tracker-ui-79a8.onrender.com/)
+
 ## Overview
 
 A full-stack intelligent job tracking system that integrates real-time job searching, AI-driven resume matching, and automated application status tracking. The system utilizes a "Smart Backend" architecture where state transitions are managed via Redis, ensuring data consistency and scalability.
