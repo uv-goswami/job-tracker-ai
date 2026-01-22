@@ -17,7 +17,11 @@ const getUserId = (req) => {
 
 async function routes(fastify, options) {
 
-  fastify.get('/api/jobs', async (request, reply) => {
+    fastify.get('/api/health', async (request, reply) => {
+    return { status: 'ok', timestamp: new Date() };
+    }); 
+
+    fastify.get('/api/jobs', async (request, reply) => {
     const { query, location, remote, jobType, datePosted, skills, minScore } = request.query;
     const userId = getUserId(request);
 
