@@ -78,7 +78,9 @@ async function routes(fastify, options) {
 
     try {
         const pipeline = redis.pipeline();
-        scoredJobs.forEach(job => pipeline.hset(`job_details`, job.job_id, JSON.stringify(job)));
+        scoredJobs.forEach(job => {
+            pipeline.setex(`job:details:${job.job_id}`, 86400, JSON.stringify(job));
+        });
         await pipeline.exec();
     } catch(e) {}
 
@@ -104,7 +106,7 @@ async function routes(fastify, options) {
             text = buffer.toString();
         }
         
-        await redis.set(`user:${userId}:resume`, text);
+        await redis.setex(`user:${userId}:resume`, 604800, text);
         return { success: true };
     } catch (err) {
         if (err.message.includes("NOPERM")) return reply.code(500).send({ error: "DB Permission Error" });
@@ -124,8 +126,9 @@ async function routes(fastify, options) {
     const pendingJobId = await redis.get(`user:${userId}:pending_check`);
     
     if (!pendingJobId) return { pending: false };
-    const jobData = await redis.hget(`job_details`, pendingJobId);
-    return { pending: true, jobId: pendingJobId, job: jobData ? JSON.parse(jobData) : {} };
+
+    const jobRaw = await redis.get(`job:details:${pendingJobId}`);
+    return { pending: true, jobId: pendingJobId, job: jobRaw ? JSON.parse(jobRaw) : {} };
   });
 
   fastify.post('/api/track/confirm', async (request, reply) => {
@@ -133,9 +136,16 @@ async function routes(fastify, options) {
     const { jobId, status } = request.body;
     
     if (status !== 'Ignored') {
+        const jobRaw = await redis.get(`job:details:${jobId}`);
+        const jobData = jobRaw ? JSON.parse(jobRaw) : { job_title: 'Unknown Job', employer_name: 'Unknown Company' };
+
         const entry = {
             jobId,
             status: status === 'Applied Earlier' ? 'Applied' : status,
+            snapshot: { 
+                title: jobData.job_title, 
+                company: jobData.employer_name 
+            },
             timestamp: new Date().toISOString(),
             history: [{ stage: status, date: new Date().toISOString() }]
         };
@@ -164,8 +174,18 @@ async function routes(fastify, options) {
     
     const apps = await Promise.all(Object.values(rawData).map(async (raw) => {
         const app = JSON.parse(raw);
-        const jobRaw = await redis.hget(`job_details`, app.jobId);
-        return { ...app, job: jobRaw ? JSON.parse(jobRaw) : { job_title: "Unknown" } };
+        
+        let job = { job_title: 'Unknown', employer_name: 'Unknown' };
+        
+        if (app.snapshot) {
+            job = { job_title: app.snapshot.title, employer_name: app.snapshot.company };
+        } 
+        else {
+            const jobRaw = await redis.get(`job:details:${app.jobId}`);
+            if (jobRaw) job = JSON.parse(jobRaw);
+        }
+
+        return { ...app, job };
     }));
     return apps;
   });
