@@ -1,72 +1,105 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { ChatGoogleGenerativeAI } = require("@langchain/google-genai");
+const { z } = require("zod");
+const { StructuredOutputParser } = require("langchain/output_parsers");
+const { PromptTemplate } = require("@langchain/core/prompts");
 require('dotenv').config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+const model = new ChatGoogleGenerativeAI({
+  modelName: "gemini-2.5-flash", 
+  apiKey: process.env.GEMINI_API_KEY,
+  temperature: 0.7,
+});
+
+
+const matchingSchema = z.array(
+  z.object({
+    job_id: z.string().describe("The ID of the job being scored"),
+    score: z.number().describe("Match score between 0 and 100"),
+    reason: z.string().describe("A concise reason for the score (max 15 words)")
+  })
+);
+
+const matchingParser = StructuredOutputParser.fromZodSchema(matchingSchema);
 
 const matchJobs = async (resumeText, jobs) => {
-  if (!resumeText) return jobs.map(j => ({ ...j, matchScore: 0, matchReason: "Upload resume to see score" }));
-  const jobsToScore = jobs.slice(0, 5); 
-  
-  const prompt = `
-    You are an ATS Scoring AI. 
-    Resume: "${resumeText.slice(0, 1000)}"
+  if (!resumeText || jobs.length === 0) {
+    return jobs.map(j => ({ ...j, matchScore: 0, matchReason: "N/A" }));
+  }
+
+
+  const jobsToScore = jobs.slice(0, 5);
+
+  const chain = PromptTemplate.fromTemplate(
+    `You are an expert ATS (Applicant Tracking System) AI.
     
-    Jobs (JSON): ${JSON.stringify(jobsToScore.map(j => ({ id: j.job_id, title: j.job_title, desc: j.job_description?.slice(0, 200) })))}
-    
-    Task: Return JSON object where keys are job_ids and values are: { score: number (0-100), reason: string (max 10 words) }.
-    Strict JSON only.
-  `;
+    RESUME:
+    {resume}
+
+    JOBS TO EVALUATE:
+    {jobs}
+
+    Analyze the resume against each job.
+    {format_instructions}`
+  ).pipe(model).pipe(matchingParser);
 
   try {
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, '').trim(); 
-    const scores = JSON.parse(text);
-    
-    return jobs.map(job => ({
-      ...job,
-      matchScore: scores[job.job_id]?.score || (Math.floor(Math.random() * 40) + 10),
-      matchReason: scores[job.job_id]?.reason || "General Match"
-    }));
+
+    const results = await chain.invoke({
+      resume: resumeText.slice(0, 2000), 
+      jobs: JSON.stringify(jobsToScore.map(j => ({ id: j.job_id, title: j.job_title, desc: j.job_description?.slice(0, 300) }))),
+      format_instructions: matchingParser.getFormatInstructions(),
+    });
+
+    return jobs.map(job => {
+      const scoreData = results.find(r => r.job_id === job.job_id);
+      return {
+        ...job,
+        matchScore: scoreData ? scoreData.score : 0,
+        matchReason: scoreData ? scoreData.reason : "Analysis failed"
+      };
+    });
+
   } catch (error) {
-    console.error("AI Matching Error Details:", error);
+    console.error("LangChain Matching Error:", error.message);
     return jobs.map(j => ({ ...j, matchScore: 0, matchReason: "AI Unavailable" }));
   }
 };
 
-const chatResponse = async (message) => {
-    const prompt = `
-      You are a Job Assistant. User says: "${message}".
-      
-      If the user asks to filter/find jobs, return a JSON Object like:
-      {
-        "reply": "Sure, showing remote React jobs.",
-        "action": "FILTER",
-        "params": { 
-           "query": "React", 
-           "remote": true, 
-           "jobType": "FULLTIME" (or PARTTIME/CONTRACT/INTERN),
-           "minScore": 70 (if asked for high match)
-        }
-      }
 
-      If the user asks a general question, return:
-      {
-        "reply": "Simple answer here.",
-        "action": "NONE"
-      }
-      
-      Strict JSON output only.
-    `;
+const chatSchema = z.object({
+  reply: z.string().describe("The natural language answer to the user"),
+  action: z.enum(["FILTER", "NONE"]).describe("The action to take on the frontend"),
+  params: z.object({
+    query: z.string().optional(),
+    remote: z.boolean().optional(),
+    jobType: z.enum(["FULLTIME", "CONTRACT", "INTERN", "ALL"]).optional(),
+    minScore: z.number().optional()
+  }).optional().describe("Filter parameters if action is FILTER")
+});
+
+const chatParser = StructuredOutputParser.fromZodSchema(chatSchema);
+
+const chatResponse = async (message) => {
+  const chain = PromptTemplate.fromTemplate(
+    `You are a helpful Job Assistant for a developer job board.
+    User Query: "{message}"
     
-    try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().replace(/```json|```/g, '').trim();
-        return JSON.parse(text);
-    } catch (e) {
-        console.error("AI Chat Error Details:", e);
-        return { reply: "I'm having trouble thinking right now (Check Server Logs).", action: "NONE" };
-    }
+    If the user asks to find/show/filter jobs, set action to "FILTER" and extract params.
+    If the user asks general questions, set action to "NONE".
+    
+    {format_instructions}`
+  ).pipe(model).pipe(chatParser);
+
+  try {
+    return await chain.invoke({
+      message: message,
+      format_instructions: chatParser.getFormatInstructions()
+    });
+  } catch (e) {
+    console.error("LangChain Chat Error:", e.message);
+    return { reply: "I'm having trouble understanding right now.", action: "NONE" };
+  }
 };
 
 module.exports = { matchJobs, chatResponse };

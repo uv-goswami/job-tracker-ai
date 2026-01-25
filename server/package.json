@@ -3,11 +3,14 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^9.4.0",
     "@google/generative-ai": "^0.24.1",
+    "@langchain/core": "^1.1.17",
+    "@langchain/google-genai": "^2.1.13",
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "fastify": "^5.7.1",
     "ioredis": "^5.9.2",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.3.6"
   },
   "name": "server",
   "version": "1.0.0",
