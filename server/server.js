@@ -6,7 +6,7 @@ const multipart = require('@fastify/multipart');
 require('dotenv').config();
 
 fastify.register(cors, { 
-    origin: '*',
+    origin: ['http://localhost:5173', 'https://job-tracker-ui-79a8.onrender.com'],
     methods: ['GET', 'POST', 'PUT', 'DELETE']
 });
 
